@@ -13,6 +13,8 @@ PROCS="2 4 8 16 32 64"
 # P/2 por no' (com P=2, o mestre fica num no' e o escravo no outro).
 # Ate' P=32 sao 16 por no' = 1 por nucleo fisico; P=64 usa o Hyper-Threading.
 run_mpi() {   # run_mpi <P> <tasks> <grain>
-    srun --exclusive -N 2 -n "$1" --ntasks-per-node=$(($1 / 2)) \
+    local per_node=$(($1 / 2)) extra=""
+    [ "$per_node" -gt "${SLURM_CPUS_ON_NODE:-32}" ] && extra="--overcommit"
+    srun -N 2 -n "$1" --ntasks-per-node=$per_node $extra \
          ./MPIMonteCarlo "$2" "$POINTS" "$3"
 }

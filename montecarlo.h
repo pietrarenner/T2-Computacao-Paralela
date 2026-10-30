@@ -8,11 +8,11 @@
  * Uma TAREFA é sortear n pontos (x, y) no quadrado [0,1] x [0,1] e contar
  * quantos caem dentro do quarto de circulo x^2 + y^2 <= 1.
  *
- * Diferenca para o original: la' a semente vinha do relogio (srand(tempo)),
+ * Diferenca para o original: a semente vinha do relogio (srand(tempo)),
  * entao cada execucao dava um resultado diferente. Aqui a semente da tarefa
- * e' o proprio indice da tarefa, e rand_r guarda o estado na variavel 'seed'
+ * é o proprio indice da tarefa, e rand_r guarda o estado na variavel 'seed'
  * em vez de num estado global. Assim o resultado de cada tarefa nao depende
- * de qual escravo a processou nem da ordem: a saida e' igual a da versao
+ * de qual escravo a processou nem da ordem: a saida é igual a da versao
  * sequencial.
  */
 

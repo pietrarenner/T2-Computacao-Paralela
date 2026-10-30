@@ -2,7 +2,6 @@
 #SBATCH -J t2-gran
 #SBATCH -N 2
 #SBATCH --exclusive
-#SBATCH --ntasks-per-node=32
 #SBATCH -t 01:00:00
 #SBATCH -o results/raw/%x-%j.out
 # Granularidade e balanceamento, P = 32:
