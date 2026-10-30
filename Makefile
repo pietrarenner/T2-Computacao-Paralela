@@ -3,7 +3,7 @@ CC     = gcc
 MPICC  = mpicc
 CFLAGS = -O2 -Wall -std=gnu11
 
-all: MonteCarloSequential MPIMonteCarlo pingpong
+all: MonteCarloSequential MPIMonteCarlo
 
 MonteCarloSequential: MonteCarloSequential.c montecarlo.h
 	$(CC) $(CFLAGS) -o $@ $<
@@ -11,14 +11,11 @@ MonteCarloSequential: MonteCarloSequential.c montecarlo.h
 MPIMonteCarlo: MPIMonteCarlo.c montecarlo.h
 	$(MPICC) $(CFLAGS) -o $@ $<
 
-pingpong: pingpong.c montecarlo.h
-	$(MPICC) $(CFLAGS) -o $@ $<
-
 # Confere que a versao MPI da' o mesmo resultado que a sequencial.
 test: all
 	./scripts/test_local.sh
 
 clean:
-	rm -f MonteCarloSequential MPIMonteCarlo pingpong
+	rm -f MonteCarloSequential MPIMonteCarlo
 
 .PHONY: all test clean

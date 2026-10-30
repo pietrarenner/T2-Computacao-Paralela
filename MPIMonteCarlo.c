@@ -11,7 +11,8 @@
  *   escravo -> mestre  TAG_RESULT        {first, size, c_0 .. c_size-1}
  *   mestre -> escravo  TAG_WORK          {first, size}             lote de tarefas
  *   mestre -> escravo  TAG_KILL          {0, 0}                    saco vazio
- *   escravo -> mestre  TAG_COMPUTATIONS  tempo ocupado (double), so' no fim
+ *   escravo -> mestre  TAG_COMPUTATIONS  {ocupado, comunicacao, idas e voltas}
+ *                                         (double[3]), so' no fim
  *   escravo -> mestre  TAG_NAME          nome do no' (char), so' no fim
  *
  * Os valores 0, 200, 300 e 400 sao os mesmos tags do original.
@@ -100,13 +101,14 @@ void master_io() {
      * laco acima enquanto o mestre ainda atende outros escravos. */
     MPI_Barrier(MPI_COMM_WORLD);
     for (int i = 1; i < num_processes; i++) {
-        double busy;
+        double stats[3];               /* busy, comm, idas e voltas */
         char slave_name[MPI_MAX_PROCESSOR_NAME];
-        MPI_Recv(&busy, 1, MPI_DOUBLE, i, TAG_COMPUTATIONS, MPI_COMM_WORLD, &status);
+        MPI_Recv(stats, 3, MPI_DOUBLE, i, TAG_COMPUTATIONS, MPI_COMM_WORLD, &status);
         MPI_Recv(slave_name, MPI_MAX_PROCESSOR_NAME, MPI_CHAR, i, TAG_NAME,
                  MPI_COMM_WORLD, &status);
-        printf("SLAVE rank=%d host=%s tasks=%d busy=%.6f stop_at=%.6f\n",
-               i, slave_name, computations[i], busy, stopped_at[i]);
+        printf("SLAVE rank=%d host=%s tasks=%d busy=%.6f stop_at=%.6f comm=%.6f rtt=%.9f\n",
+               i, slave_name, computations[i], stats[0], stopped_at[i], stats[1],
+               stats[1] / stats[2]);
     }
 
     free(counts);
@@ -118,15 +120,22 @@ void master_io() {
 void slave_io() {
     int *msg = malloc((2 + grain) * sizeof *msg);
     double busy = 0.0;                 /* tempo gasto calculando */
+    double comm = 0.0;                 /* tempo entre enviar um pedido e receber a resposta */
+    int round_trips = 0;               /* quantas idas e voltas foram medidas */
     int work[2] = {0, 0};
 
     MPI_Barrier(MPI_COMM_WORLD);
 
     /* A iniciativa e' do escravo: comeca pedindo trabalho. */
+    double t_send = MPI_Wtime();
     MPI_Send(work, 2, MPI_INT, 0, TAG_REQUEST, MPI_COMM_WORLD);
 
     while (1) {
         MPI_Recv(work, 2, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        /* Ida e volta real nesta configuracao: mensagens + espera na fila
+         * do mestre (item "a" da granularidade). */
+        comm += MPI_Wtime() - t_send;
+        round_trips++;
         if (status.MPI_TAG == TAG_KILL)
             break;
 
@@ -140,11 +149,13 @@ void slave_io() {
          * pede o proximo lote. */
         msg[0] = first;
         msg[1] = size;
+        t_send = MPI_Wtime();
         MPI_Send(msg, 2 + size, MPI_INT, 0, TAG_RESULT, MPI_COMM_WORLD);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);       /* ver o comentario em master_io */
-    MPI_Send(&busy, 1, MPI_DOUBLE, 0, TAG_COMPUTATIONS, MPI_COMM_WORLD);
+    double stats[3] = {busy, comm, round_trips};
+    MPI_Send(stats, 3, MPI_DOUBLE, 0, TAG_COMPUTATIONS, MPI_COMM_WORLD);
     MPI_Send(processor_name, MPI_MAX_PROCESSOR_NAME, MPI_CHAR, 0, TAG_NAME, MPI_COMM_WORLD);
     free(msg);
 }

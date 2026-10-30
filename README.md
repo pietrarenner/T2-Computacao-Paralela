@@ -83,12 +83,11 @@ Gera `results/tabelas.md`, os CSVs, `results/speedup.png` e
 
 ## Arquivos
 
-| arquivo | conteúdo |
-|---|---|
-| `montecarlo.h` | a tarefa e o checksum, usados pelas duas versões |
-| `MonteCarloSequential.c` | versão sequencial (T1) |
-| `MPIMonteCarlo.c` | versão mestre/escravo |
-| `pingpong.c` | tempo de um lote × ida e volta de mensagem |
-| `scripts/*.sbatch` | jobs Slurm; saídas brutas em `results/raw/` |
-| `scripts/analyze.py` | mediana/mín/máx, speed-up, eficiências, balanceamento, gráficos |
-| `original/` | código original do repositório base |
+| arquivo                  | conteúdo                                                        |
+| ------------------------ | --------------------------------------------------------------- |
+| `montecarlo.h`           | a tarefa e o checksum, usados pelas duas versões                |
+| `MonteCarloSequential.c` | versão sequencial (T1)                                          |
+| `MPIMonteCarlo.c`        | versão mestre/escravo                                           |
+| `scripts/*.sbatch`       | jobs Slurm; saídas brutas em `results/raw/`                     |
+| `scripts/analyze.py`     | mediana/mín/máx, speed-up, eficiências, balanceamento, gráficos |
+| `original/`              | código original do repositório base                             |

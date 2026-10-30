@@ -5,7 +5,7 @@ Uso: python3 scripts/analyze.py [results/raw] [results]
 
 Lê results/raw/t2-{seq,strong,weak,gran}-*.out e gera em results/:
   tabelas.md          todas as tabelas (mediana, mínimo, máximo)
-  strong.csv weak.csv gran.csv pingpong.csv slaves_G*.csv
+  strong.csv weak.csv gran.csv slaves_G*.csv
   speedup.png         speed-up da forte com a reta ideal
   eficiencia.png      eficiência da forte e da fraca
 """
@@ -19,6 +19,9 @@ from collections import defaultdict
 
 RAW = sys.argv[1] if len(sys.argv) > 1 else "results/raw"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "results"
+
+# Nucleos fisicos nos 2 nos (atlantica: 2 x 8). Acima disso entra o HT.
+PHYS_CORES = 16
 
 KV = re.compile(r"(\w+)=(\S+)")
 
@@ -48,8 +51,6 @@ def read_runs(prefix):
                     runs[-1]["slaves"].append(parse_kv(line))
                 elif line.startswith("MASTER ") and runs:
                     runs[-1]["master"] = parse_kv(line)["host"]
-                elif line.startswith("PINGPONG "):
-                    bench.append(parse_kv(line))
     return runs, bench
 
 
@@ -155,16 +156,7 @@ def main():
     write_csv("weak.csv", hdr, rows)
 
     # ---------------- granularidade ----------------
-    gran, bench = read_runs("t2-gran")
-    if bench:
-        hdr = ["G", "nós", "bytes resposta", "tempo tarefa (ms)", "tempo lote (ms)",
-               "ida e volta (us)", "lote / ida-e-volta"]
-        rows = [[b["grain"], "mesmo nó" if b["case"] == "intra" else "nós diferentes",
-                 b["bytes"], fmt(b["task_time"] * 1e3, 4), fmt(b["batch_time"] * 1e3, 3),
-                 fmt(b["rtt"] * 1e6, 2), fmt(b["ratio"], 1)] for b in bench]
-        md.append("## Granularidade (a): computação x comunicação\n")
-        md.append(md_table(hdr, rows))
-        write_csv("pingpong.csv", hdr, rows)
+    gran, _ = read_runs("t2-gran")
 
     by_g = defaultdict(list)
     for r in gran:
@@ -184,9 +176,11 @@ def main():
     write_csv("gran.csv", hdr, rows)
 
     # (c) balanceamento: execução mediana de cada G
-    md.append(f"## Balanceamento (c): por escravo, execução mediana de cada G, P = {pg}\n")
+    md.append(f"## Granularidade (a) e balanceamento (c): por escravo, execução mediana de cada G, P = {pg}\n")
     hdr = ["G", "tarefas mín", "tarefas máx", "ocupado mín (s)", "ocupado máx (s)",
-           "ocioso no fim máx (s)", "ocupação média"]
+           "ocioso no fim máx (s)", "ocupação média", "tempo/tarefa (ms)",
+           "ida e volta (ms)", "ida e volta mesmo nó (ms)", "ida e volta outro nó (ms)",
+           "lote / ida e volta"]
     rows = []
     for g in sorted(by_g):
         rs = sorted(by_g[g], key=lambda r: r["time"])
@@ -194,11 +188,27 @@ def main():
         sl = r["slaves"]
         idle_end = [max(0.0, r["time"] - s["stop_at"]) for s in sl]
         busy = [s["busy"] for s in sl]
+        # Item (a), medido na própria execução com P processos:
+        # tempo de uma tarefa = tempo ocupado / tarefas; ida e volta = média
+        # medida por cada escravo entre enviar o pedido/resultado e receber a
+        # resposta (mensagens + fila no mestre). Saídas antigas sem "rtt"
+        # usam uma estimativa a partir de stop_at e busy.
+        task_ms = 1e3 * sum(busy) / max(1, sum(s["tasks"] for s in sl))
+        if all("rtt" in s for s in sl):
+            waits = [s["rtt"] for s in sl]
+            same = [s["rtt"] for s in sl if s["host"] == r.get("master")]
+            other = [s["rtt"] for s in sl if s["host"] != r.get("master")]
+        else:
+            waits = [(s["stop_at"] - s["busy"]) / -(-s["tasks"] // g) for s in sl if s["tasks"]]
+            same = other = []
+        mean_ms = lambda v: fmt(1e3 * statistics.mean(v), 3) if v else "-"
         rows.append([g, min(s["tasks"] for s in sl), max(s["tasks"] for s in sl),
                      fmt(min(busy)), fmt(max(busy)), fmt(max(idle_end)),
-                     fmt(statistics.mean(busy) / r["time"], 3)])
-        write_csv(f"slaves_G{g}.csv", ["rank", "host", "tasks", "busy_s", "stop_at_s", "idle_end_s"],
-                  [[s["rank"], s["host"], s["tasks"], s["busy"], s["stop_at"], i]
+                     fmt(statistics.mean(busy) / r["time"], 3), fmt(task_ms, 3),
+                     mean_ms(waits), mean_ms(same), mean_ms(other),
+                     fmt(task_ms * g / (1e3 * statistics.mean(waits)), 1)])
+        write_csv(f"slaves_G{g}.csv", ["rank", "host", "tasks", "busy_s", "stop_at_s", "idle_end_s", "rtt_s"],
+                  [[s["rank"], s["host"], s["tasks"], s["busy"], s["stop_at"], i, s.get("rtt", "")]
                    for s, i in zip(sl, idle_end)])
     md.append(md_table(hdr, rows))
 
@@ -215,16 +225,19 @@ def main():
         print("matplotlib não instalado: gráficos não gerados (pip install matplotlib)")
         return
 
+    if not plot_strong:
+        print("sem saídas t2-strong: gráficos não gerados")
+        return
     ps = [p for p, _, _ in plot_strong]
     fig, ax = plt.subplots(figsize=(4.5, 3.2))
     ax.plot(ps, ps, "--", color="gray", label="ideal (S = P)")
     ax.plot(ps, [s for _, s, _ in plot_strong], "o-", label="medido")
-    if 32 in ps:
-        ax.axvline(32, color="lightgray", lw=0.8)  # acima de 32: HT
+    if PHYS_CORES in ps:
+        ax.axvline(PHYS_CORES, color="lightgray", lw=0.8)  # acima: HT
     ax.set_xscale("log", base=2)
     ax.set_yscale("log", base=2)
     ax.set_xticks(ps, [str(p) for p in ps])
-    ax.set_yticks(ps, [str(p) for p in ps])
+    ax.set_yticks([1] + ps, ["1"] + [str(p) for p in ps])
     ax.set_xlabel("processos (P)")
     ax.set_ylabel("speed-up")
     ax.legend()
@@ -236,8 +249,8 @@ def main():
     if plot_weak:
         ax.plot([p for p, _ in plot_weak], [e for _, e in plot_weak], "s-", label="fraca (T1/T_P)")
     ax.axhline(1.0, ls="--", color="gray")
-    if 32 in ps:
-        ax.axvline(32, color="lightgray", lw=0.8)  # acima de 32: HT
+    if PHYS_CORES in ps:
+        ax.axvline(PHYS_CORES, color="lightgray", lw=0.8)  # acima: HT
     ax.set_xscale("log", base=2)
     ax.set_xticks(ps, [str(p) for p in ps])
     ax.set_ylim(0, 1.1)
