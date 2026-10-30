@@ -6,5 +6,5 @@
 #SBATCH -o results/raw/%x-%j.out
 # T1: versao sequencial, mesmas flags da paralela, 1 no' exclusivo.
 source scripts/params.sh
-echo "# nos=$SLURM_JOB_NODELIST"; lscpu; gcc --version | head -1
-for r in $(seq $REPETICOES); do ./pi_sequencial $TAREFAS $PONTOS; done
+echo "# nodes=$SLURM_JOB_NODELIST"; lscpu; gcc --version | head -1
+for r in $(seq $REPS); do ./MonteCarloSequential $TASKS $POINTS; done

@@ -5,9 +5,9 @@
 #SBATCH --ntasks-per-node=32
 #SBATCH -t 04:00:00
 #SBATCH -o results/raw/%x-%j.out
-# Escalabilidade fraca: tarefas = TAREFAS * P, mesmo custo por tarefa (PONTOS).
+# Escalabilidade fraca: tarefas = TASKS * P, mesmo custo por tarefa (POINTS).
 source scripts/params.sh
-echo "# nos=$SLURM_JOB_NODELIST"
-for P in $PROCESSOS; do
-    for r in $(seq $REPETICOES); do roda_mpi $P $((TAREFAS * P)) $G; done
+echo "# nodes=$SLURM_JOB_NODELIST"
+for P in $PROCS; do
+    for r in $(seq $REPS); do run_mpi $P $((TASKS * P)) $GRAIN; done
 done
